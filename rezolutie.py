@@ -31,11 +31,11 @@ def unit_propagation(clauses):
         new_clauses = []
         for clause in clauses:
             if literal in clause:
-                continue  # Clauza e satisfăcută
+                continue 
             if neg_lit in clause:
                 new_clause = clause - {neg_lit}
                 if not new_clause:
-                    return None  # Clauză vidă - nesatisfiabil
+                    return None 
                 new_clauses.append(new_clause)
                 if len(new_clause) == 1:
                     units.append(new_clause)
@@ -45,7 +45,6 @@ def unit_propagation(clauses):
     return clauses
 
 def select_clause(clauses):
-    # Euristică: preferă clauzele cele mai mici
     return min(clauses, key=len)
 
 def resolution(clauses, max_steps=100000):
@@ -62,7 +61,7 @@ def resolution(clauses, max_steps=100000):
             resolvents = resolve(ci, cj)
             for r in resolvents:
                 if not r:
-                    return True  # Am găsit contradicție
+                    return True 
                 if r not in processed:
                     processed.add(r)
                     active.add(r)
