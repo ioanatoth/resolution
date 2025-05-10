@@ -1,96 +1,133 @@
 import time
 import tracemalloc
 import csv
+from heapq import heappush, heappop
 
 def parse_input():
-    print("Introdu clauzele în forma CNF (literali separați prin spațiu, - pentru negare).")
-    print("Exemplu: A -B   înseamnă (A ∨ ¬B). Clauză vidă: apasă ENTER de 2 ori.")
+    print("Introdu clauzele (ex: 'A -B C'). Pentru a termina, lasă o linie goală:")
     clauses = []
     while True:
         line = input().strip()
-        if line == "":
+        if not line and clauses:
             break
+        if not line and not clauses:
+            print("Introdu cel puțin o clauză!")
+            continue
         literals = line.split()
         clause = frozenset(literals)
         clauses.append(clause)
-    return set(clauses)
+    return clauses
 
 def negate(literal):
-    return literal[1:] if literal.startswith("-") else "-" + literal
+    return literal[1:] if literal.startswith('-') else '-' + literal
+
+def unit_propagation(clauses):
+    units = [c for c in clauses if len(c) == 1]
+    while units:
+        unit = units.pop()
+        literal = next(iter(unit))
+        neg_lit = negate(literal)
+        
+        new_clauses = []
+        for clause in clauses:
+            if literal in clause:
+                continue  # Clauza e satisfăcută
+            if neg_lit in clause:
+                new_clause = clause - {neg_lit}
+                if not new_clause:
+                    return None  # Clauză vidă - nesatisfiabil
+                new_clauses.append(new_clause)
+                if len(new_clause) == 1:
+                    units.append(new_clause)
+            else:
+                new_clauses.append(clause)
+        clauses = new_clauses
+    return clauses
+
+def select_clause(clauses):
+    # Euristică: preferă clauzele cele mai mici
+    return min(clauses, key=len)
+
+def resolution(clauses, max_steps=100000):
+    steps = 0
+    processed = set()
+    active = set(clauses)
+    
+    while active and steps < max_steps:
+        steps += 1
+        ci = select_clause(active)
+        active.remove(ci)
+        
+        for cj in list(active):
+            resolvents = resolve(ci, cj)
+            for r in resolvents:
+                if not r:
+                    return True  # Am găsit contradicție
+                if r not in processed:
+                    processed.add(r)
+                    active.add(r)
+    
+    return False if steps < max_steps else None
 
 def resolve(ci, cj):
     resolvents = set()
     for lit in ci:
-        if negate(lit) in cj:
-            new_clause = (ci - {lit}) | (cj - {negate(lit)})
+        neg_lit = negate(lit)
+        if neg_lit in cj:
+            new_clause = (ci - {lit}) | (cj - {neg_lit})
             resolvents.add(frozenset(new_clause))
     return resolvents
 
-def resolution(clauses):
-    processed = set(clauses)
-    while True:
-        new = set()
-        clause_list = list(processed)
-        for i in range(len(clause_list)):
-            for j in range(i + 1, len(clause_list)):
-                resolvents = resolve(clause_list[i], clause_list[j])
-                for r in resolvents:
-                    if not r:
-                        print(f"Clauză vidă generată din {clause_list[i]} și {clause_list[j]}.")
-                        return True
-                    if r not in processed:
-                        new.add(r)
-        if not new:
-            return False
-        processed.update(new)
-
-def salveaza_performanta_csv(timp, memorie_kb, nr_clauze, nr_literali, medie_literali, rezultat, nume_test="Test", nume_fisier="rezultate_performanta.csv"):
-    scrie_antet = False
-    try:
-        with open(nume_fisier, "r"):
-            pass
-    except FileNotFoundError:
-        scrie_antet = True
-
-    with open(nume_fisier, mode='a', newline='') as f:
-        writer = csv.writer(f)
-        if scrie_antet:
-            writer.writerow(["Nume test", "Nr. clauze", "Nr. literali (total)", "Medie literali/clauză","Timp (secunde)", "Memorie max (KB)", "Satisfiabilitate"])
-        writer.writerow([nume_test, nr_clauze, nr_literali, f"{medie_literali:.2f}",f"{timp:.6f}", f"{memorie_kb:.2f}", rezultat])
-        
-if __name__ == "__main__":
+def run_solver():
     clauses = parse_input()
-    print("\nClauzele introduse:")
-    for clause in clauses:
-        print(clause)
-
-    nr_clauze = len(clauses)
-    nr_literali = sum(len(cl) for cl in clauses)
-    medie_literali = nr_literali / nr_clauze if nr_clauze > 0 else 0
-
+    if not clauses:
+        return
+    
+    print("\nClauze de procesat:", len(clauses))
+    start = time.time()
+    simplified = unit_propagation(clauses)
+    if simplified is None:
+        print("Rezultat: NESATISFIABILĂ (prin unit propagation)")
+        return True
     tracemalloc.start()
     start_time = time.perf_counter()
-
-    is_unsatisfiable = resolution(clauses)
-
+    try:
+        result = resolution(simplified)
+    except Exception as e:
+        print(f"Eroare: {str(e)}")
+        result = None
     end_time = time.perf_counter()
-    current, peak = tracemalloc.get_traced_memory()
+    _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
-
     durata = end_time - start_time
-    memorie_kb = peak / 1024
+    mem_mb = peak / (1024 * 1024)
     
-    salveaza_performanta_csv(
-    durata, memorie_kb, nr_clauze, nr_literali, medie_literali,
-    rezultat="NESATISFIABILA" if is_unsatisfiable else "SATISFIABILA",
-    nume_test=f"Test-{nr_clauze}cl-{nr_literali}lit"
-)
-
-    if is_unsatisfiable:
-        print("\nFormula este nesatisfiabila.")
+    if result is None:
+        print("Limită depășită - nu s-a putut determina")
+    elif result:
+        print("Rezultat: NESATISFIABILĂ")
     else:
-        print("\nFormula este satisfiabilă.")
+        print("Rezultat: SATISFIABILĂ")
+    
+    print(f"Timp: {durata:.2f}s, Memorie: {mem_mb:.2f}MB")
+    save_results(
+        len(clauses),
+        sum(len(c) for c in clauses),
+        durata,
+        mem_mb,
+        "UNSAT" if result else "SAT" if result is False else "UNKNOWN"
+    )
 
-    print(f"\nTimp de execuție: {durata:.6f} secunde")
-    print(f"Memorie maximă utilizată: {memorie_kb:.2f} KB")
-    print(f"Numar clauze: {nr_clauze}, numar total literali: {nr_literali}, medie/clauza: {medie_literali:.2f}")
+def save_results(n_clauses, n_literals, time_sec, mem_mb, result):
+    try:
+        with open("results.csv", "a") as f:
+            writer = csv.writer(f)
+            if f.tell() == 0:
+                writer.writerow(["Clauses", "Literals", "Time(s)", "Memory(MB)", "Result"])
+            writer.writerow([n_clauses, n_literals, f"{time_sec:.2f}", f"{mem_mb:.2f}", result])
+    except Exception as e:
+        print(f"Eroare la salvare: {e}")
+
+if __name__ == "__main__":
+    print("=== SAT Solver Optimizat ===")
+    run_solver()
