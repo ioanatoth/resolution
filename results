@@ -1,0 +1,4 @@
+Nume test,Nr. clauze,Nr. literali (total),Medie literali/clauză,Timp (secunde),Memorie max (KB),Satisfiabilitate
+Test-2cl-2lit,2,2,1.00,0.000088,1.63,NESATISFIABILA
+Test-2cl-7lit,2,7,3.50,0.000228,4.66,SATISFIABILA
+Test-20cl-53lit,20,53,2.65,21.364420,2410.77,NESATISFIABILA
